@@ -1,0 +1,37 @@
+# General
+.DS_Store
+Thumbs.db
+*.log
+logs/
+
+# Node / Web
+node_modules/
+dist/
+build/
+.tmp/
+.temp/
+.cache/
+coverage/
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.iml
+
+# Env
+.env
+.env.*.local
+
+# Framework caches
+.next/
+out/
+.turbo/
+.parcel-cache/
+
+# OS
+__MACOSX/
+
+# Misc
+*.local
+*.swp
+*.swo
