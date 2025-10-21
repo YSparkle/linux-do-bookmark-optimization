@@ -444,10 +444,10 @@ User（JSON 输入）
 
 本次新增了一个可在 Edge/Chrome 中直接加载的最小骨架，目录位于 `extension/`。
 
-- manifest.json：MV3 基本配置，限定只在 `https://linux.do/u/*/activity/bookmarks*` 匹配页面注入。
-- src/background/sw.js：Service Worker，处理快捷键 `toggle-panel` 并向活动页发送切换面板消息；预留设置读写接口。
-- src/content/content.js：内容脚本，注入右下角“收藏增强”按钮与 macOS 风格悬浮面板；支持 Ctrl/⌘+K 切换、Esc 关闭；面板内提供示例搜索框与示例列表数据（后续替换为真实抓取结果）。
-- src/options/*：选项页，可填写并保存 API Base / API Key / Model，数据存储于 `chrome.storage.local`。
+- manifest.json：MV3 基本配置，限定只在 `https://linux.do/u/*/activity/bookmarks*` 匹配页面注入；新增 `unlimitedStorage` 权限；为后续 AI 调用添加了 CSP `extension_pages` 的 `connect-src`（含 `https://api.openai.com`）。
+- src/background/sw.js：Service Worker，处理快捷键 `toggle-panel` 并向活动页发送切换面板消息；预留设置读写接口；兼容更新为 `onStartup` 日志。
+- src/content/content.js：内容脚本，注入右下角“收藏增强”按钮与 macOS 风格悬浮面板；支持 Ctrl/⌘+K 切换、Esc 关闭；面板内提供示例搜索框与示例列表数据（后续替换为真实抓取结果）。新增本地结果缓存（`chrome.storage.local`），优先渲染缓存并在后台刷新，提升打开速度。
+- src/options/*：选项页，可填写并保存 API Base / API Key / Model，数据存储于 `chrome.storage.local`。保存时会尝试为 API Base 的域名申请可选主机权限（`chrome.permissions.request`），以便后续在 SW/Options 中发起跨域请求。
 
 注意：为避免提交无效二进制图片，本次未包含 icons 资源；图标并非必需，后续可按需补充并在 manifest 中开启。
 
