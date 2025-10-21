@@ -2,7 +2,7 @@
 
 本仓库保存的是产品需求文档（PRD），用于指导一款 Microsoft Edge 扩展（MV3）实现：在 linux.do 的“收藏帖子”页面植入一个居中、macOS 风格的悬浮窗，自动抓取全部收藏（分页），基于三层标签体系与 AI 多标签分类，提供多选（AND）筛选与标题搜索，并将一切数据本地持久化。
 
-说明：以 Edge 扩展为准，Tampermonkey（篡改猴）脚本说明仅为补充和对照，不作为主实现。
+说明：以 Edge 扩展为准，Tampermonkey（篡改猴）脚本说明仅为补充和对照，不作为主实现。补充文档见 `docs/Tampermonkey-Supplement.md`。
 
 
 ## 一句话目标
