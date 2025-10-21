@@ -195,8 +195,244 @@ System 约束
 
 - MVP（当前目标）：悬浮窗 + 全量抓取 + 三层标签 + AI 分类 + 搜索与多选 AND 筛选 + 持久化 + 导入/导出
 - M2（可选）：对话面板（检索/汇总/比较），作者维度筛选，排序增强，多窗口并行任务
+- M3（工程化）：打包与发布、国际化、权限最小化与 CSP 强化、可观测性与日志
+- M4（研究中）：离线嵌入向量与本地检索、跨设备同步（可选）
 
 
 ## 状态
 
-本仓库当前仅包含 PRD，尚未进入开发阶段；收到“API 三件套 + 域名白名单 + 偏好项”后，将据此产出第一版实现草稿（MV3 目录结构、manifest、options 与消息协议等）。
+本仓库当前为“设计与落地方案 PRD”，已补充更细化的工程落地与规范，便于拿到 API 与域名白名单后直接开工。
+
+
+## 目录结构草案（MV3）
+
+extension/
+  manifest.json
+  assets/
+    icons/
+      16.png 32.png 48.png 128.png
+  src/
+    content/
+      content.ts
+      panel/
+        panel.html
+        panel.css
+        panel.ts
+    background/
+      sw.ts
+    options/
+      options.html
+      options.css
+      options.ts
+    lib/
+      idb.ts          （IndexedDB 封装）
+      api.ts          （AI/HTTP 请求、重试与节流）
+      classify.ts     （AI 分类调度与结果校验）
+      dom.ts          （linux.do DOM/解析工具）
+      msg.ts          （消息协议定义）
+      types.ts        （类型与数据结构）
+      logger.ts       （日志/埋点，可切换到 no-op）
+  _locales/
+    zh_CN/messages.json
+
+说明：TS/构建工具可视情况增补；本 PRD 不强制构建链路，允许原生 ES 模块 + 轻量工具链。
+
+
+## Manifest 示例（Edge/Chrome MV3）
+
+{
+  "manifest_version": 3,
+  "name": "Linux.do 收藏增强",
+  "version": "0.1.0",
+  "description": "在 linux.do 收藏页提供 AI 标签筛选与本地持久化",
+  "action": { "default_title": "Linux.do 收藏增强" },
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": ["https://linux.do/*"],
+  "optional_host_permissions": ["https://api.openai.com/*"],
+  "background": { "service_worker": "src/background/sw.js", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": ["https://linux.do/u/*/activity/bookmarks*"],
+      "js": ["src/content/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "src/options/options.html",
+  "commands": {
+    "toggle-panel": {
+      "suggested_key": { "default": "Ctrl+K", "mac": "Command+K" },
+      "description": "打开/关闭悬浮窗"
+    }
+  },
+  "icons": {
+    "16": "assets/icons/16.png",
+    "32": "assets/icons/32.png",
+    "48": "assets/icons/48.png",
+    "128": "assets/icons/128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.openai.com"
+  }
+}
+
+要点：
+- AI 私有域按需添加到 optional_host_permissions 与 CSP connect-src；首次调用前通过 `chrome.permissions.request` 请求授权。
+- 如果更倾向于“按需注入”，可改为在 Service Worker 中用 `chrome.scripting.executeScript` 注入 content.js（仍建议保留 matches 限定）。
+
+
+## 消息协议（Content ↔ Service Worker）
+
+消息信封
+- { type: string, reqId: string, payload?: any }
+- 响应沿用相同 reqId；关键异步流程可通过 progress 事件推送。
+
+请求（content → sw）
+- FETCH_BOOKMARK_PAGES { startPage?: number } → 分页抓取收藏，返回 {total, done}
+- FETCH_TOPIC_DETAIL { url, topicId, postNumber } → 补充正文/作者/原生标签
+- CLASSIFY_BATCH { postIds[] } → 触发 AI 分类并返回结果摘要
+- SAVE_SETTINGS { partial } / GET_SETTINGS → 读写 Options
+- EXPORT_JSON { scope: 'all'|'rules' } → 导出数据
+- IMPORT_JSON { data, mode: 'merge'|'replace' }
+- LIST_TAGS → 获取（预制 + 用户）标签字典
+- UPSERT_TAG { name, enabled?, weight? } / DELETE_TAG { name }
+
+事件（sw → content）
+- PROGRESS { phase: 'fetch'|'classify'|'export'|'import', current, total }
+- CLASSIFY_RESULT { postId, aiTags, modelSignature }
+- ERROR { code, message, detail }
+- DATA_UPDATED { scope: 'posts'|'tags'|'settings' }
+
+错误码建议
+- E_BAD_JSON（AI 返回非 JSON）
+- E_TIMEOUT（超时）
+- E_HTTP（网络/状态码）
+- E_PARSE（DOM/JSON 解析失败）
+- E_PERMISSION（可选域授权被拒）
+
+
+## 数据抓取与解析（Discourse 兼容）
+
+策略优先级
+1) JSON 优先：多数 Discourse 端点支持 .json 后缀。
+   - 书签页：`/u/<user>/activity/bookmarks.json?page=N`（若不可用则回退 DOM）
+   - 主题/帖子：`/t/<slug>/<topicId>.json`，再在 post_stream 中按 post_number 定位书签的楼层，读取 cooked/raw。
+2) DOM 回退：
+   - 书签列表：CSS 选择器提取 标题、作者、链接、时间、原生标签。
+   - 正文：访问帖子链接，提取对应楼层 HTML，去噪（引用/签名/脚注）并转为纯文本。
+
+分页停止条件
+- 页码递增直到返回空列表或重复游标；保存 pageCursor 以便断点续扫。
+
+健壮性
+- 针对登录态/私密/删除：记录状态码与占位，UI 灰显并可过滤隐藏。
+- 针对接口/结构变化：两级回退（JSON→DOM），并上报 ERROR 事件。
+
+
+## IndexedDB 设计细节
+
+库名：linuxdo-bookmarks v1
+- posts（keyPath: id，id= `${topicId}#${postNumber}`）
+  - 索引：by_fav (favoriteAt)、by_upd (updatedAt)、by_author (author)、by_tag (multiEntry: aiTags+userTags+nativeTags)
+- tags（keyPath: name）
+  - 字段：{ name, type: 'preset'|'user', enabled: true, weight?: number }
+- settings（keyPath: key）
+  - 扁平键值：apiBase、apiKey、model、并发/超时等
+- index_meta（keyPath: key）
+  - pageCursor、scannedPostIds、failedQueue、schemaVersion
+
+迁移：schemaVersion 由 SW 统一迁移；失败自动回滚并提示。
+
+
+## 并发/速率控制与重试
+
+- fetchConcurrency（默认 4）：抓取分页与详情并行，使用信号量队列；每个请求带 AbortController 与超时（默认 20s）。
+- aiConcurrency（默认 2）：AI 分类批量切片，失败指数退避（2^n，含抖动），每日配额上限可设。
+- 重试：网络/5xx/429 重试 ≤3 次；AI 非 JSON 重试 1 次；仍失败标记并入 failedQueue。
+- 断点：抓取与分类均持久化进度；面板允许“暂停/继续”。
+
+
+## AI 提示词模板与请求示例
+
+System
+- 你是严格的标签分类器。禁止创造新标签，只能从候选池中选择 0..N 个。
+- 仅输出严格 JSON 数组，如 ["技术教程","Docker"]。
+
+User（JSON 输入）
+{
+  "candidate_tags": ["技术教程","安全实践","Docker","网络配置"],
+  "post_title": "...",
+  "post_body": "...（按 bodyCharLimit 截断或摘要）",
+  "notes": { "native_tags": ["A","B"], "language": "zh" }
+}
+
+请求（以 OpenAI Chat Completions 为例）
+- POST {apiBase}/chat/completions
+- headers: Authorization: Bearer {apiKey}
+- body: { model, messages: [...], response_format: { type: "json_object" } | 工程策略：在返回后做 JSON-only 校验并剔除解释文本 }
+
+响应处理
+- 若是字符串首尾包裹代码围栏，先剥离；再 JSON.parse；失败即触发容错路径。
+
+
+## Options 页面字段细化
+
+基础
+- apiBase、apiKey、model
+- aiConcurrency、fetchConcurrency、timeoutMs、retryMax
+- bodyCharLimit、enableKeywordClusters
+- budgets：每批上限/每日配额
+
+高级
+- 自定义 headers（k/v 列表）
+- 选择存储策略（仅 IndexedDB / 冗余存 chrome.storage.local）
+- 导入/导出（全量/仅标签规则/脱敏导出）
+- 热键自定义、排序默认值、作者筛选模式（AND/OR）
+
+
+## 开发与调试（Edge）
+
+- edge://extensions 打开开发者模式 → 加载已解压扩展（manifest 所在目录）。
+- 在扩展卡片中点击“Service Worker 检查视图”查看日志与网络。
+- content script 调试：在目标页面打开 DevTools，Sources 面板查看 src/content/*。
+- 存储观察：Application → IndexedDB / Storage → chrome.storage.local。
+- 可选：在 Options 页面提供“开发者模式”开关，显示更多诊断信息与导出日志按钮。
+
+
+## 打包与发布
+
+- 打包：构建（若使用 TS/打包器）→ 清理 source map（可选）→ 压缩为 zip。
+- Edge 外发布：通过 Microsoft Partner Center 提交，更新说明强调“仅在 linux.do 域运行，零上报/可选 AI 出站”。
+- 版本规范：SemVer；manifest version 与内部 schemaVersion 分别维护。
+
+
+## 权限最小化与安全
+
+- host_permissions 仅限 https://linux.do/*；AI 域名放入 optional_host_permissions。
+- CSP 严格：禁止远程脚本；connect-src 仅列出必要 AI 域。
+- API Key 仅本地；支持“仅本会话记忆”。
+- 一键清除缓存；导出可脱敏（无正文）。
+
+
+## 国际化与可访问性
+
+- _locales 提供 zh-CN 起步，预留 en-US。
+- ARIA 与键盘可达；高对比度与暗色主题支持。
+
+
+## 风险与兼容性
+
+- Discourse 页面结构变化：通过双通道解析与选择器容错规避。
+- 大数据量：虚拟列表 + 分页加载；避免一次性渲染。
+- AI 费用与配额：默认批量上限与每日预算保护。
+
+
+## 参考实现建议
+
+- IndexedDB：优先原生 IDB + 轻量封装；若引入库，推荐 idb/Dexie（二选一）。
+- 虚拟列表：基于 IntersectionObserver + 占位高度实现轻量级虚拟滚动。
+- 队列：实现一个 TokenBucket/Semaphore 工具，统一 fetch/AI 调用并发控制。
+
+
+## 后续计划
+
+- 在收到“API 三件套 + AI 域白名单 + 偏好默认值”后，提交第一版可运行骨架：manifest、SW 框架、Options 页面与注入式悬浮窗壳体；随后逐步接入抓取、存储与 AI 分类。
