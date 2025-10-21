@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Linux.do 收藏增强",
+  "version": "0.1.0",
+  "description": "在 linux.do 收藏页提供 AI 标签筛选与本地持久化（骨架版）",
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": ["https://linux.do/*"],
+  "optional_host_permissions": ["https://api.openai.com/*"],
+  "background": {
+    "service_worker": "src/background/sw.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://linux.do/u/*/activity/bookmarks*"],
+      "js": ["src/content/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "src/options/options.html",
+  "commands": {
+    "toggle-panel": {
+      "suggested_key": { "default": "Ctrl+K", "mac": "Command+K" },
+      "description": "打开/关闭悬浮窗"
+    }
+  }
+}
