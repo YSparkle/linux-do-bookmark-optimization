@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Linux.do 收藏增强 · 设置</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Linux.do 收藏增强 · 设置</h1>
+      <p class="hint">所有设置仅保存在本地（chrome.storage.local）。API Key 不会被上传。</p>
+
+      <form id="form">
+        <label>
+          <span>API Base URL</span>
+          <input id="apiBase" type="text" placeholder="例如 https://api.openai.com/v1" />
+        </label>
+        <label>
+          <span>API Key</span>
+          <input id="apiKey" type="password" placeholder="请输入你的 API Key" />
+        </label>
+        <label>
+          <span>Model 名称</span>
+          <input id="model" type="text" placeholder="例如 gpt-4o-mini" />
+        </label>
+        <div class="actions">
+          <button type="submit">保存</button>
+          <button id="reset" type="button" class="secondary">清除</button>
+        </div>
+      </form>
+
+      <footer>
+        <small>仅在 <code>https://linux.do/u/*/activity/bookmarks</code> 页面运行。扩展为骨架版，后续将逐步加入抓取与 AI 分类能力。</small>
+      </footer>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>

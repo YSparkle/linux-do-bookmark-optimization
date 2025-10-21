@@ -436,3 +436,62 @@ User（JSON 输入）
 ## 后续计划
 
 - 在收到“API 三件套 + AI 域白名单 + 偏好默认值”后，提交第一版可运行骨架：manifest、SW 框架、Options 页面与注入式悬浮窗壳体；随后逐步接入抓取、存储与 AI 分类。
+
+
+---
+
+# 工程更新：已提交最小可运行骨架（2025-10）
+
+本次新增了一个可在 Edge/Chrome 中直接加载的最小骨架，目录位于 `extension/`。
+
+- manifest.json：MV3 基本配置，限定只在 `https://linux.do/u/*/activity/bookmarks*` 匹配页面注入。
+- src/background/sw.js：Service Worker，处理快捷键 `toggle-panel` 并向活动页发送切换面板消息；预留设置读写接口。
+- src/content/content.js：内容脚本，注入右下角“收藏增强”按钮与 macOS 风格悬浮面板；支持 Ctrl/⌘+K 切换、Esc 关闭；面板内提供示例搜索框与示例列表数据（后续替换为真实抓取结果）。
+- src/options/*：选项页，可填写并保存 API Base / API Key / Model，数据存储于 `chrome.storage.local`。
+
+注意：为避免提交无效二进制图片，本次未包含 icons 资源；图标并非必需，后续可按需补充并在 manifest 中开启。
+
+## 本地加载与验证
+
+1) 打开 Edge `edge://extensions`（或 Chrome `chrome://extensions`），开启“开发者模式”。
+2) 选择“加载已解压的扩展”，指向本仓库的 `extension/` 目录。
+3) 登录 linux.do 后访问 `https://linux.do/u/<你的ID>/activity/bookmarks`。
+4) 右下角将出现“收藏增强”按钮，点击或使用 Ctrl/⌘+K 打开面板；Esc 关闭。
+5) 选项页：在扩展卡片内点击“详情 → 扩展选项”进入，验证设置保存与读取。
+
+若快捷键无效，请确认扩展的“键盘快捷键”设置中 `toggle-panel` 未被其它快捷键占用。
+
+## 下一步（从骨架到 MVP）
+
+- 抓取
+  - 书签分页：优先 `.../activity/bookmarks.json?page=N`，回退 DOM 解析。
+  - 帖子正文：优先 `.../t/<slug>/<topicId>.json` 中按 post_number 定位；回退到 HTML → 纯文本。
+  - 断点续扫：保存 pageCursor 与 scannedPostIds。
+- 数据层
+  - IndexedDB 初始化：posts / tags / settings / index_meta 四库；读写封装与版本迁移。
+  - 列表虚拟化：IntersectionObserver 占位方案，避免长列表卡顿。
+- AI 分类
+  - Options 配置生效；构建消息体与 Prompt 模板；JSON-only 校验与一次性重试。
+  - 批量切片 + 并发/配额控制；失败入队重试。
+- UI & 交互
+  - 标签面板与 AND 筛选；行内编辑标签并置 `locked=true`。
+  - 导入/导出（JSON），含“仅规则/脱敏导出”。
+- 安全与权限
+  - 可选域授权流程：首次调用前检测 `optional_host_permissions` 并请求授权。
+  - CSP connect-src 动态拼接允许域，或在 manifest 中按需列出。
+
+## 关键接口草图（示例伪码）
+
+- 抓取分页
+  - GET /u/<user>/activity/bookmarks.json?page=N → { bookmarks: [...], has_next: bool }
+  - 每条 item 派发到明细抓取/解析队列。
+- 帖子详情
+  - GET /t/<slug>/<topicId>.json → post_stream.posts[] 中按 post_number 定位 → 提取 cooked/raw → 纯文本。
+- 分类请求
+  - POST {apiBase}/chat/completions (Authorization: Bearer {apiKey})
+  - messages: [system约束, user(JSON输入)]；响应做 JSON-only 解析。
+
+## 备注
+
+- 当前骨架未访问任何外部网络，仅在 linux.do 页面插入 UI 与本地存储设置。
+- 真实抓取、IndexedDB、AI 分类将在后续迭代逐步接入，不影响现有加载与调试流程。
