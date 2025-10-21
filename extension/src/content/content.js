@@ -15,14 +15,30 @@
     });
   } catch {}
 
-  // 安装页面快捷键：Ctrl/Cmd + K 切换；Esc 关闭
+  // 安装页面快捷键：Ctrl/Cmd + K 切换；Esc 关闭；/ 聚焦搜索框
   window.addEventListener('keydown', (e) => {
     const key = String(e.key || '').toLowerCase();
+    // 若正在输入框/文本域/可编辑区域内，除 Ctrl/Cmd+K 外不拦截
+    const ae = document.activeElement;
+    const isTyping = ae && (
+      (ae.tagName === 'INPUT' && ae.getAttribute('type') !== 'checkbox') ||
+      ae.tagName === 'TEXTAREA' ||
+      (ae instanceof HTMLElement && ae.isContentEditable)
+    );
     if ((e.ctrlKey || e.metaKey) && key === 'k') {
       e.preventDefault();
       togglePanel();
     } else if (key === 'escape') {
       hidePanel();
+    } else if (!isTyping && !e.ctrlKey && !e.metaKey && key === '/') {
+      const host = document.getElementById(HOST_ID);
+      try {
+        const input = host?.shadowRoot?.getElementById('ldbe-search');
+        if (input) {
+          e.preventDefault();
+          input.focus();
+        }
+      } catch {}
     }
   }, true);
 
@@ -141,12 +157,17 @@
     const list = shadowRoot.getElementById('ldbe-list');
     const search = shadowRoot.getElementById('ldbe-search');
 
-    // 示例数据
-    const sample = [
-      { title: '示例：如何使用 Discourse JSON 接口获取收藏', href: '#', tags: ['技术教程'] },
-      { title: '示例：容器环境调优与网络配置', href: '#', tags: ['容器/Docker', '网络配置'] },
-      { title: '示例：安全实践入门指南', href: '#', tags: ['安全实践'] },
-    ];
+    let allItems = [];
+    let loading = false;
+
+    function setHint(text) {
+      list.innerHTML = '';
+      const d = document.createElement('div');
+      d.className = 'hint';
+      d.style.padding = '8px';
+      d.textContent = text;
+      list.appendChild(d);
+    }
 
     function render(items) {
       list.innerHTML = '';
@@ -154,8 +175,13 @@
         const row = document.createElement('div');
         row.style.padding = '10px 6px';
         row.style.borderBottom = '1px solid rgba(0,0,0,.06)';
+        const tagText = (it.tags && it.tags.length) ? `标签：${it.tags.join('、')}` : '';
+        const metaText = [];
+        if (it.author) metaText.push(`作者：${escapeHTML(it.author)}`);
+        if (it.time) metaText.push(`时间：${escapeHTML(it.time)}`);
+        const metaLine = [tagText, metaText.join(' · ')].filter(Boolean).join(' | ');
         row.innerHTML = `<div style="font-size:13px;font-weight:600"><a href="${it.href}" target="_blank" style="color:#1155cc;text-decoration:none">${escapeHTML(it.title)}</a></div>
-                         <div style="font-size:12px;color:#666;margin-top:4px">标签：${it.tags.join('、')}</div>`;
+                         <div style="font-size:12px;color:#666;margin-top:4px">${metaLine || '&nbsp;'}</div>`;
         list.appendChild(row);
       }
       if (!items.length) {
@@ -167,7 +193,115 @@
       }
     }
 
-    render(sample);
+    async function loadAll() {
+      loading = true;
+      setHint('正在加载你的收藏...');
+      try {
+        const items = await fetchAllBookmarks();
+        if (items.length) {
+          allItems = items;
+          render(allItems);
+        } else {
+          // 回退：解析当前页 DOM
+          const domItems = extractFromDOM();
+          if (domItems.length) {
+            allItems = domItems;
+            render(allItems);
+          } else {
+            setHint('未能获取收藏列表。请确认已登录，或页面结构可能已变化。');
+          }
+        }
+      } catch (err) {
+        console.debug('[ldbe] loadAll failed', err);
+        setHint('加载失败，请稍后重试。');
+      } finally {
+        loading = false;
+      }
+    }
+
+    async function fetchAllBookmarks(maxPages = 50) {
+      const results = [];
+      const origin = location.origin;
+      const parts = location.pathname.split('/').filter(Boolean);
+      const idx = parts.indexOf('u');
+      const username = idx >= 0 && parts[idx + 1] ? parts[idx + 1] : null;
+      if (!username) return results;
+      let page = 1;
+      let hasNext = true;
+      while (hasNext && page <= maxPages) {
+        const url = `${origin}/u/${username}/activity/bookmarks.json?page=${page}`;
+        try {
+          const res = await fetch(url, { credentials: 'include' });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          const pageItems = normalizeBookmarkJson(data);
+          if (pageItems.length === 0) break;
+          results.push(...pageItems);
+          hasNext = getHasNext(data, pageItems);
+          page += 1;
+        } catch (e) {
+          console.debug('[ldbe] json fetch failed, fallback to DOM', e);
+          break;
+        }
+      }
+      return dedupeByHref(results);
+    }
+
+    function normalizeBookmarkJson(data) {
+      const out = [];
+      const candidates = Array.isArray(data?.bookmarks) ? data.bookmarks
+        : Array.isArray(data?.user_actions) ? data.user_actions
+        : Array.isArray(data?.items) ? data.items
+        : [];
+      for (const b of candidates) {
+        const title = b?.title || b?.topic_title || b?.name || '';
+        const urlRel = b?.bookmarkable_url || b?.url || b?.link || (b?.topic_slug && b?.topic_id ? `/t/${b.topic_slug}/${b.topic_id}` : null);
+        if (!title || !urlRel) continue;
+        const href = new URL(urlRel, location.origin).href;
+        const tags = Array.isArray(b?.tags) ? b.tags : (Array.isArray(b?.topic_tags) ? b.topic_tags : []);
+        const author = b?.username || b?.user?.username || '';
+        const time = b?.created_at || b?.updated_at || '';
+        out.push({ title, href, tags, author, time });
+      }
+      return out;
+    }
+
+    function getHasNext(data, pageItems) {
+      if (typeof data?.has_next === 'boolean') return data.has_next;
+      if (typeof data?.hasMore === 'boolean') return data.hasMore;
+      // 若无显式标志：当本页条目数为 0 视为结束
+      return pageItems.length > 0;
+    }
+
+    function extractFromDOM() {
+      const items = [];
+      const scope = document.querySelector('main') || document.body;
+      // 优先选择书签列表中的主题链接
+      const anchors = Array.from(scope.querySelectorAll('a[href^="/t/"]'));
+      const seen = new Set();
+      for (const a of anchors) {
+        const href = new URL(a.getAttribute('href'), location.origin).href;
+        const title = (a.textContent || '').trim();
+        if (!title || seen.has(href)) continue;
+        seen.add(href);
+        const tagEls = a.closest('article, li, tr, .item, .bookmark')?.querySelectorAll?.('a[href^="/tag/"] , .discourse-tag, a.discourse-tag') || [];
+        const tags = Array.from(tagEls).map(el => (el.textContent || '').trim()).filter(Boolean);
+        items.push({ title, href, tags });
+        if (items.length >= 100) break; // 防御性上限
+      }
+      return items;
+    }
+
+    function dedupeByHref(items) {
+      const map = new Map();
+      for (const it of items) {
+        if (!map.has(it.href)) map.set(it.href, it);
+      }
+      return Array.from(map.values());
+    }
+
+    // 初始加载
+    loadAll();
 
     overlay.addEventListener('click', hidePanel);
     shadowRoot.addEventListener('click', (e) => {
@@ -177,7 +311,7 @@
       if (action === 'close') hidePanel();
       else if (action === 'minimize') hidePanel();
       else if (action === 'reload') {
-        render(sample);
+        loadAll();
       } else if (action === 'settings') {
         try { chrome.runtime.openOptionsPage(); } catch {}
       }
@@ -185,8 +319,8 @@
 
     search.addEventListener('input', () => {
       const q = String(search.value || '').trim().toLowerCase();
-      if (!q) return render(sample);
-      const filtered = sample.filter(i => i.title.toLowerCase().includes(q));
+      if (!q) return render(allItems);
+      const filtered = allItems.filter(i => (i.title || '').toLowerCase().includes(q));
       render(filtered);
     });
   }
