@@ -13,6 +13,18 @@
 
       <form id="form">
         <label>
+          <span>API 提供商</span>
+          <select id="provider">
+            <option value="custom">自定义（OpenAI 兼容）</option>
+            <option value="openai">OpenAI</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="azure">Azure OpenAI（兼容接口）</option>
+            <option value="deepseek">DeepSeek（兼容接口）</option>
+            <option value="moonshot">Moonshot（兼容接口）</option>
+            <option value="groq">Groq（兼容接口）</option>
+          </select>
+        </label>
+        <label>
           <span>API Base URL</span>
           <input id="apiBase" type="text" placeholder="例如 https://api.openai.com/v1" />
         </label>
@@ -27,11 +39,15 @@
         <div class="actions">
           <button type="submit">保存</button>
           <button id="reset" type="button" class="secondary">清除</button>
+          <button id="test" type="button">测试连接</button>
         </div>
       </form>
 
       <footer>
         <small>仅在 <code>https://linux.do/u/*/activity/bookmarks</code> 页面运行。扩展为骨架版，后续将逐步加入抓取与 AI 分类能力。</small>
+        <div style="margin-top:10px">
+          <a href="star-rail.html" target="_blank">打开：星穹铁道策略规划（Alpha，识图+策略）</a>
+        </div>
       </footer>
     </main>
 

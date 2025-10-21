@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>星穹铁道 · 策略规划（Alpha）</title>
+    <link rel="stylesheet" href="star-rail.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="header">
+        <a class="back" href="options.html">← 返回设置</a>
+        <h1>星穹铁道 · 策略规划（Alpha）</h1>
+      </header>
+
+      <section class="card">
+        <h2>说明</h2>
+        <ul class="hint">
+          <li>此页面在浏览器扩展内运行，无法直接控制游戏窗口与键鼠，仅提供“识图 → 计算 → 制定策略 → 供你选择”的智能规划能力。</li>
+          <li>识图基于你配置的 AI 视觉模型（OpenAI 兼容接口）。建议使用带视觉能力的模型（如 gpt-4o 系列）。</li>
+          <li>上传角色、技能（需点击展开详细描述）、怪物信息等截图，多张均可，系统会自动分析并计算。</li>
+          <li>“凹/不凹”两套方案会分别给出，包含回能/嘲讽等博弈策略；你可自由选择。</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>策略模式</h2>
+        <div class="modes">
+          <label><input type="radio" name="mode" value="farm" checked /> 刷材料（以回合/用时最短为目标）</label>
+          <label><input type="radio" name="mode" value="abyss" /> 深渊/虚构叙事（结合 Buff 追求最少回合）</label>
+          <label><input type="radio" name="mode" value="custom" /> 自定义（在提示词补充具体目标）</label>
+        </div>
+        <label class="prompt">
+          <span>系统提示词（可自定义，留空用默认）</span>
+          <textarea id="systemPrompt" rows="8" placeholder="默认提示词将引导 AI 读取截图中的简述与详细描述，枚举角色与怪物，计算全量数值与收益，并生成“凹/不凹”的多套最优策略与回合计划。"></textarea>
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>上传截图（拖拽或选择多张）</h2>
+        <div id="dropzone" class="dropzone">
+          <input id="fileInput" type="file" accept="image/*" multiple />
+          <p>拖拽图片到此处，或点击选择文件。请包含：角色面板、遗器、光锥、技能（需点击查看详细描述）、敌人信息等。</p>
+          <div id="preview" class="preview"></div>
+        </div>
+        <div class="actions">
+          <button id="analyze">识图 + 计算策略</button>
+          <button id="clear" class="secondary">清空</button>
+          <button id="export" class="secondary">导出 JSON</button>
+        </div>
+      </section>
+
+      <section id="result" class="card" hidden>
+        <h2>识别结果与策略</h2>
+        <div id="summary" class="summary"></div>
+        <div class="split">
+          <div>
+            <h3>角色与装备（计算后）</h3>
+            <div id="characters"></div>
+            <h3>敌人与环境</h3>
+            <div id="enemies"></div>
+          </div>
+          <div>
+            <div class="strategy-toggle">
+              <label><input type="radio" name="roll" value="roll" checked /> 凹（允许控制受击/回能等博弈）</label>
+              <label><input type="radio" name="roll" value="noroll" /> 不凹（稳定直打）</label>
+            </div>
+            <div id="plans"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>历史记录</h2>
+        <div id="history" class="history"></div>
+      </section>
+    </main>
+
+    <script src="star-rail.js"></script>
+  </body>
+</html>

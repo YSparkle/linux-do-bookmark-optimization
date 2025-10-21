@@ -5,7 +5,7 @@
   "description": "在 linux.do 收藏页提供 AI 标签筛选与本地持久化（骨架版）",
   "permissions": ["storage", "scripting", "activeTab"],
   "host_permissions": ["https://linux.do/*"],
-  "optional_host_permissions": ["https://api.openai.com/*"],
+  "optional_host_permissions": ["*://*/*"],
   "background": {
     "service_worker": "src/background/sw.js",
     "type": "module"
