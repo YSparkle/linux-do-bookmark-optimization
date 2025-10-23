@@ -19,9 +19,17 @@ chrome.commands.onCommand.addListener(async (command) => {
   try {
     await chrome.tabs.sendMessage(tab.id, { type: MSG_TOGGLE });
   } catch (err) {
-    // 若 content 尚未注入（如采用按需注入），可在此动态注入
-    // 这里保留静默失败，避免报错干扰用户
-    console.debug('[ldbe] toggle message failed (content not ready?)', err);
+    // 若 content 尚未注入（如采用按需注入），尝试动态注入并重发
+    console.debug('[ldbe] content not ready, try injecting content script', err);
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['src/content/content.js'],
+      });
+      await chrome.tabs.sendMessage(tab.id, { type: MSG_TOGGLE });
+    } catch (e2) {
+      console.debug('[ldbe] inject/send failed', e2);
+    }
   }
 });
 
