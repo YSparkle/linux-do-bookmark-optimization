@@ -8,8 +8,8 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log('[ldbe] service worker installed');
 });
 
-chrome.runtime.onActivate?.addListener?.(() => {
-  console.log('[ldbe] service worker activated');
+chrome.runtime.onStartup?.addListener?.(() => {
+  console.log('[ldbe] service worker started');
 });
 
 chrome.commands.onCommand.addListener(async (command) => {

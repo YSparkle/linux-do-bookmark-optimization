@@ -160,6 +160,9 @@
     let allItems = [];
     let loading = false;
 
+    const CACHE_KEY = 'ldbe_cache_v1';
+    const CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟
+
     function setHint(text) {
       list.innerHTML = '';
       const d = document.createElement('div');
@@ -193,27 +196,58 @@
       }
     }
 
+    async function readCache() {
+      try {
+        const obj = await chrome.storage.local.get(CACHE_KEY);
+        return obj?.[CACHE_KEY] || null;
+      } catch {
+        return null;
+      }
+    }
+
+    async function writeCache(items) {
+      try {
+        const payload = {};
+        payload[CACHE_KEY] = { ts: Date.now(), items };
+        await chrome.storage.local.set(payload);
+      } catch {}
+    }
+
     async function loadAll() {
       loading = true;
-      setHint('正在加载你的收藏...');
+      // 优先渲染缓存，随后后台刷新
+      try {
+        const cache = await readCache();
+        if (cache && Array.isArray(cache.items) && cache.items.length && (Date.now() - (cache.ts || 0) < CACHE_TTL_MS)) {
+          allItems = cache.items;
+          render(allItems);
+        } else {
+          setHint('正在加载你的收藏...');
+        }
+      } catch {
+        setHint('正在加载你的收藏...');
+      }
+
       try {
         const items = await fetchAllBookmarks();
         if (items.length) {
           allItems = items;
           render(allItems);
+          await writeCache(allItems);
         } else {
           // 回退：解析当前页 DOM
           const domItems = extractFromDOM();
           if (domItems.length) {
             allItems = domItems;
             render(allItems);
+            await writeCache(allItems);
           } else {
-            setHint('未能获取收藏列表。请确认已登录，或页面结构可能已变化。');
+            if (!list.children.length) setHint('未能获取收藏列表。请确认已登录，或页面结构可能已变化。');
           }
         }
       } catch (err) {
         console.debug('[ldbe] loadAll failed', err);
-        setHint('加载失败，请稍后重试。');
+        if (!allItems.length) setHint('加载失败，请稍后重试。');
       } finally {
         loading = false;
       }
