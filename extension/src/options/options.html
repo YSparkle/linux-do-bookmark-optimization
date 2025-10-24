@@ -12,6 +12,7 @@
       <p class="hint">所有设置仅保存在本地（chrome.storage.local）。API Key 不会被上传。</p>
 
       <form id="form">
+        <h2>基础配置</h2>
         <label>
           <span>API Base URL</span>
           <input id="apiBase" type="text" placeholder="例如 https://api.openai.com/v1" />
@@ -24,9 +25,44 @@
           <span>Model 名称</span>
           <input id="model" type="text" placeholder="例如 gpt-4o-mini" />
         </label>
+
+        <h2>高级设置</h2>
+        <div class="grid">
+          <label>
+            <span>AI 并发数</span>
+            <input id="aiConcurrency" type="number" min="1" max="10" placeholder="2" />
+          </label>
+          <label>
+            <span>抓取并发数</span>
+            <input id="fetchConcurrency" type="number" min="1" max="10" placeholder="4" />
+          </label>
+          <label>
+            <span>超时时间 (ms)</span>
+            <input id="timeoutMs" type="number" min="5000" max="60000" placeholder="20000" />
+          </label>
+          <label>
+            <span>最大重试次数</span>
+            <input id="retryMax" type="number" min="0" max="5" placeholder="3" />
+          </label>
+          <label>
+            <span>正文字符上限</span>
+            <input id="bodyCharLimit" type="number" min="1000" max="32000" placeholder="8000" />
+          </label>
+          <label>
+            <span>每批分类上限</span>
+            <input id="batchLimit" type="number" min="10" max="500" placeholder="100" />
+          </label>
+        </div>
+
+        <label class="checkbox">
+          <input id="enablePresetTags" type="checkbox" />
+          <span>启用预制标签（25 个 Linux/技术相关标签）</span>
+        </label>
+
         <div class="actions">
           <button type="submit">保存</button>
-          <button id="reset" type="button" class="secondary">清除</button>
+          <button id="reset" type="button" class="secondary">恢复默认</button>
+          <button id="clearData" type="button" class="danger">清除所有数据</button>
         </div>
       </form>
 
