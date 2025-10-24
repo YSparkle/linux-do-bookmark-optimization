@@ -495,3 +495,211 @@ User（JSON 输入）
 
 - 当前骨架未访问任何外部网络，仅在 linux.do 页面插入 UI 与本地存储设置。
 - 真实抓取、IndexedDB、AI 分类将在后续迭代逐步接入，不影响现有加载与调试流程。
+
+
+---
+
+# 工程更新：模块化架构与 AI 分类完整实现（2025-10）
+
+## 本次更新概要
+
+基于前序骨架版本，本次更新实现了完整的模块化架构、IndexedDB 数据层、AI 分类引擎，以及增强的设置界面。主要改进包括：
+
+### 1. 模块化库结构（`src/lib/`）
+
+新增专用工具库，提供清晰的模块化架构：
+
+#### `lib/types.js`
+- 定义消息协议常量（`MSG`）：content script ↔ service worker 通信规范
+- 错误码枚举（`ERR`）：统一错误处理
+- 标签类型（`TAG_TYPE`）：preset（预制）、user（用户自定义）、native（原生）
+- 预制标签库（`PRESET_TAGS`）：25 个 Linux/技术相关标签
+- 默认设置（`DEFAULT_SETTINGS`）：所有可配置项的默认值
+- TypeScript 风格的 JSDoc 类型定义（Post、Classify、Tag、Settings）
+
+#### `lib/idb.js`
+- IndexedDB 完整封装，支持四个核心 store：
+  - **posts**：收藏帖子数据，含多个索引（by_fav, by_upd, by_author, by_tag）
+  - **classifies**：AI 分类结果与用户标签，支持锁定状态
+  - **tags**：标签字典（预制 + 用户自定义）
+  - **settings**：扩展设置（键值对）
+  - **index_meta**：抓取游标、已扫描列表、失败队列等元数据
+- 通用 CRUD 操作：`getOne`, `putOne`, `deleteOne`, `getAll`, `putMany`, `clearStore`, `clearAll`
+- 索引查询支持：`getAllByIndex`
+- 自动版本迁移与错误处理
+
+#### `lib/api.js`
+- **带重试的 fetch 封装**（`fetchWithRetry`）：
+  - 超时控制（AbortController）
+  - 指数退避重试（针对 429/5xx/网络错误）
+  - 可配置重试次数与超时时间
+- **AI 分类核心接口**（`callAIClassify`）：
+  - 构建标准 OpenAI Chat Completions 请求
+  - 严格 Prompt 工程：仅从候选池选择标签，输出严格 JSON 数组
+  - 智能响应解析：剥离代码围栏、支持多种格式、过滤非法标签
+  - 文本截断与语言检测
+- **并发控制类**（`Semaphore`）：
+  - 信号量实现，控制 AI 与抓取并发数
+  - `acquire` / `release` / `run` 方法
+
+#### `lib/classify.js`
+- **批量分类调度**（`classifyBatch`）：
+  - 自动过滤已锁定帖子
+  - 批次大小限制与每日配额保护
+  - 并发控制与进度回调
+  - 失败容错与结果记录
+- **候选标签获取**（`getCandidateTags`）：
+  - 根据设置动态启用/禁用预制标签
+  - 合并用户自定义标签
+- **手动标签编辑**（`updatePostTags`）：
+  - 人工修改后自动锁定（`locked=true`）
+  - AI 不再覆盖已锁定帖子
+- **标签合并查询**（`getPostAllTags`）：
+  - 三层标签合并：native + AI + user
+
+#### `lib/logger.js`
+- 统一日志工具，支持 debug/info/warn/error 级别
+- 可通过开关全局启用/禁用
+
+### 2. Service Worker 重构（`src/background/sw.js`）
+
+完全重写 service worker，实现完整数据协调层：
+
+- **消息驱动架构**：统一 `handleMessage` 入口，支持所有消息类型
+- **IndexedDB 初始化**：首次安装时自动创建 stores 并注入预制标签
+- **设置管理**：GET_SETTINGS / SAVE_SETTINGS，合并默认值
+- **标签管理**：LIST_TAGS / UPSERT_TAG / DELETE_TAG
+- **分类调度**：CLASSIFY_BATCH 触发批量 AI 分类并返回结果
+- **标签编辑**：UPDATE_POST_TAGS 手动编辑并锁定
+- **导入导出**：EXPORT_JSON / IMPORT_JSON，支持 all/posts/tags/settings 范围
+- **数据清理**：CLEAR_ALL_DATA 一键清空所有本地数据
+- **进度通知**：向 content script 发送 PROGRESS 和 DATA_UPDATED 消息
+
+### 3. 增强的 Options 页面（`src/options/`）
+
+#### 新增高级设置：
+- **基础配置**：API Base / API Key / Model（保持不变）
+- **高级设置**（网格布局）：
+  - AI 并发数（1-10，默认 2）
+  - 抓取并发数（1-10，默认 4）
+  - 超时时间（5000-60000 ms，默认 20000）
+  - 最大重试次数（0-5，默认 3）
+  - 正文字符上限（1000-32000，默认 8000）
+  - 每批分类上限（10-500，默认 100）
+- **预制标签开关**：启用/禁用 25 个预制技术标签
+- **三个操作按钮**：
+  - **保存**：写入所有设置并请求 API 域权限
+  - **恢复默认**：重置为 DEFAULT_SETTINGS
+  - **清除所有数据**（危险操作，红色）：清空 IndexedDB 与缓存
+
+#### UI 改进：
+- 响应式网格布局（`grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))`）
+- Checkbox 布局优化（横向排列）
+- 危险按钮视觉警示（红色背景）
+
+### 4. Manifest 更新
+
+- 新增 `icons` 配置：使用 SVG 图标（`assets/icons/icon.svg`）
+- 所有尺寸（16/32/48/128）指向同一 SVG，支持自适应缩放
+
+### 5. 数据流架构
+
+完整的数据流示意：
+
+```
+用户操作（Content Script）
+    ↓
+chrome.runtime.sendMessage({ type: MSG.XXX, payload })
+    ↓
+Service Worker → handleMessage()
+    ↓
+调用 lib/* 工具：
+  - idb.js（数据持久化）
+  - api.js（AI 请求与重试）
+  - classify.js（分类调度）
+    ↓
+返回结果或发送进度事件
+    ↓
+Content Script 更新 UI
+```
+
+### 6. 关键特性实现
+
+✅ **三层标签体系**：
+- **Native**：Discourse 原生标签，自动提取
+- **Preset**：25 个技术相关预制标签，可禁用
+- **User**：用户自定义标签，增删改
+
+✅ **AI 分类引擎**：
+- 严格 Prompt 工程：禁止创造新标签，仅从候选池勾选
+- JSON-only 响应解析，自动剥离代码围栏
+- 失败重试与容错（BAD_JSON / TIMEOUT / HTTP 错误码）
+- 人工编辑后自动锁定，AI 不再覆盖
+
+✅ **并发与速率控制**：
+- Semaphore 信号量实现
+- 可配置 AI 并发数（默认 2）与抓取并发数（默认 4）
+- 指数退避重试（2^n + 抖动，最大 10s）
+
+✅ **数据持久化**：
+- IndexedDB 为主存储，支持多索引查询
+- chrome.storage.local 为辅（设置与轻量缓存）
+- 支持全量/分类导出与合并/替换导入
+
+✅ **渐进增强**：
+- 骨架版已有的抓取与 UI 逻辑保持不变
+- 新增模块可独立测试与调试
+- 向后兼容，无破坏性更改
+
+### 7. 未来待实现功能
+
+⏳ **Content Script 集成**：
+- 将 content.js 迁移到使用新消息协议（MSG.*）
+- 调用 SW 的 CLASSIFY_BATCH / UPDATE_POST_TAGS
+- 显示 AI 分类进度与结果
+
+⏳ **虚拟列表**：
+- 实现 IntersectionObserver 占位方案
+- 支持 1000+ 帖子流畅滚动
+
+⏳ **关键词簇**（可选）：
+- AI 提取主题词作为只读辅助筛选
+
+⏳ **多作者筛选**：
+- AND/OR 模式切换
+
+⏳ **排序增强**：
+- 最新收藏 / 最新更新 / 作者 A→Z / 命中标签数
+
+### 8. 技术亮点
+
+- **ES6 模块化**：所有 lib/* 使用 `export` / `import`，manifest 中 `type: "module"`
+- **Promise 风格**：统一异步模式，避免回调地狱
+- **类型安全**：JSDoc 提供 IDE 智能提示与类型检查
+- **错误边界**：所有异步操作 try-catch，统一 ERR 错误码
+- **可测试性**：每个模块单一职责，易于单元测试
+
+## 验证步骤
+
+1. 打开 Edge `edge://extensions`（或 Chrome），启用"开发者模式"
+2. 加载已解压扩展，指向 `extension/` 目录
+3. 进入扩展选项页，填写 API 配置并保存
+4. 访问 `https://linux.do/u/<你的ID>/activity/bookmarks`
+5. 点击"收藏增强"按钮或按 `Ctrl/⌘+K` 打开面板
+6. 查看 Service Worker 日志：应显示 IndexedDB 初始化成功与预制标签注入
+7. 在 DevTools → Application → IndexedDB 中验证 `linuxdo-bookmarks` 数据库与 stores
+8. （需配置有效 API）触发 AI 分类并观察结果
+
+## 依赖与兼容性
+
+- **浏览器**：Edge/Chrome 93+（MV3 支持）
+- **无外部依赖**：纯原生 Web API（IndexedDB、Fetch、chrome.* API）
+- **文件大小**：约 30KB（未压缩）
+
+## 后续路线图
+
+- [ ] 完整集成 content script 与新消息协议
+- [ ] 实现虚拟列表性能优化
+- [ ] 添加单元测试（lib/* 模块）
+- [ ] 国际化支持（`_locales/en_US`）
+- [ ] 发布到 Edge Add-ons 商店

@@ -1,0 +1,34 @@
+{
+  "name": "linuxdo-bookmark-enhancement",
+  "version": "0.2.0",
+  "description": "Manifest V3 Microsoft Edge extension for linux.do bookmark management with AI-powered tagging",
+  "private": true,
+  "scripts": {
+    "check:syntax": "for f in extension/src/**/*.js; do node --check \"$f\" || exit 1; done",
+    "check:manifest": "python3 -m json.tool extension/manifest.json > /dev/null",
+    "check:all": "npm run check:syntax && npm run check:manifest",
+    "dev": "echo 'Load extension/  directory in edge://extensions with Developer Mode enabled'",
+    "pack": "cd extension && zip -r ../linuxdo-bookmark-enhancement.zip . -x '*.git*' -x '*.DS_Store' -x 'node_modules/*'",
+    "clean": "rm -f linuxdo-bookmark-enhancement.zip"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/linuxdo-bookmark-enhancement.git"
+  },
+  "keywords": [
+    "browser-extension",
+    "manifest-v3",
+    "edge",
+    "chrome",
+    "bookmarks",
+    "ai",
+    "tagging",
+    "linux.do",
+    "discourse"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

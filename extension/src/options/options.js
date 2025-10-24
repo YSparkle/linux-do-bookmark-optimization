@@ -1,18 +1,45 @@
-// Linux.do 收藏增强 - 选项页（骨架版 + 可选域名授权）
+// Linux.do 收藏增强 - 选项页（完整版）
 
 const $ = (sel) => document.querySelector(sel);
+
+const DEFAULT_SETTINGS = {
+  apiBase: '',
+  apiKey: '',
+  model: 'gpt-4o-mini',
+  aiConcurrency: 2,
+  fetchConcurrency: 4,
+  timeoutMs: 20000,
+  retryMax: 3,
+  bodyCharLimit: 8000,
+  batchLimit: 100,
+  enablePresetTags: true,
+};
 
 const inputs = {
   apiBase: $('#apiBase'),
   apiKey: $('#apiKey'),
   model: $('#model'),
+  aiConcurrency: $('#aiConcurrency'),
+  fetchConcurrency: $('#fetchConcurrency'),
+  timeoutMs: $('#timeoutMs'),
+  retryMax: $('#retryMax'),
+  bodyCharLimit: $('#bodyCharLimit'),
+  batchLimit: $('#batchLimit'),
+  enablePresetTags: $('#enablePresetTags'),
 };
 
 async function load() {
-  const res = await chrome.storage.local.get({ apiBase: '', apiKey: '', model: '' });
+  const res = await chrome.storage.local.get(DEFAULT_SETTINGS);
   inputs.apiBase.value = res.apiBase || '';
   inputs.apiKey.value = res.apiKey || '';
   inputs.model.value = res.model || '';
+  inputs.aiConcurrency.value = res.aiConcurrency || 2;
+  inputs.fetchConcurrency.value = res.fetchConcurrency || 4;
+  inputs.timeoutMs.value = res.timeoutMs || 20000;
+  inputs.retryMax.value = res.retryMax || 3;
+  inputs.bodyCharLimit.value = res.bodyCharLimit || 8000;
+  inputs.batchLimit.value = res.batchLimit || 100;
+  inputs.enablePresetTags.checked = res.enablePresetTags !== false;
 }
 
 async function save(e) {
@@ -21,6 +48,13 @@ async function save(e) {
     apiBase: inputs.apiBase.value.trim(),
     apiKey: inputs.apiKey.value.trim(),
     model: inputs.model.value.trim(),
+    aiConcurrency: parseInt(inputs.aiConcurrency.value, 10) || 2,
+    fetchConcurrency: parseInt(inputs.fetchConcurrency.value, 10) || 4,
+    timeoutMs: parseInt(inputs.timeoutMs.value, 10) || 20000,
+    retryMax: parseInt(inputs.retryMax.value, 10) || 3,
+    bodyCharLimit: parseInt(inputs.bodyCharLimit.value, 10) || 8000,
+    batchLimit: parseInt(inputs.batchLimit.value, 10) || 100,
+    enablePresetTags: inputs.enablePresetTags.checked,
   };
   await chrome.storage.local.set(partial);
 
@@ -42,9 +76,22 @@ async function save(e) {
 }
 
 async function reset() {
-  await chrome.storage.local.remove(['apiBase', 'apiKey', 'model']);
+  await chrome.storage.local.set(DEFAULT_SETTINGS);
   await load();
-  showToast('已清除');
+  showToast('已恢复默认设置');
+}
+
+async function clearData() {
+  if (!confirm('确定要清除所有本地数据（包括收藏、标签、分类等）？此操作不可恢复。')) {
+    return;
+  }
+  
+  try {
+    await chrome.runtime.sendMessage({ type: 'CLEAR_ALL_DATA' });
+    showToast('已清除所有数据');
+  } catch (error) {
+    showToast('清除失败：' + error.message);
+  }
 }
 
 // 解析 apiBase → origins 通配（https://host:port/*）
@@ -83,5 +130,6 @@ function showToast(text) {
 
 $('#form').addEventListener('submit', save);
 $('#reset').addEventListener('click', reset);
+$('#clearData').addEventListener('click', clearData);
 
 load();
